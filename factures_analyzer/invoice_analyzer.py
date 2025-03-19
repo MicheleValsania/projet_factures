@@ -1,3 +1,17 @@
+# analyseur_factures.py
+# Copyright (c) 2025 [Votre Nom]
+# Distribué sous la Licence Publique Générale GNU v3 (voir LICENSE)
+#
+# Ce script utilise invoice2data (https://github.com/invoice-x/invoice2data) comme dépendance,
+# sous la licence MIT :
+#   Copyright (c) 2016 Invoice-X
+#   Permission is hereby granted, free of charge, to any person obtaining a copy
+#   of this software and associated documentation files (the "Software"), to deal
+#   in the Software without restriction, [...] provided that the above copyright
+#   notice and this permission notice shall be included in all copies or substantial
+#   portions of the Software.
+# Merci à Invoice-X pour leur outil d'extraction que j'ai étendu avec une IA !
+
 import os
 import sys
 import json
