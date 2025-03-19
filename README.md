@@ -19,3 +19,10 @@ Aider les restaurateurs français à mieux gérer leurs coûts en transformant l
    ```bash
    git clone https://github.com/[votre-username]/analyseur-factures.git
    cd analyseur-factures
+## Crédits et Remerciements
+Ce projet utilise [invoice2data](https://github.com/invoice-x/invoice2data), une bibliothèque open-source sous licence MIT. Voici leur notice de copyright, conformément à leur licence :
+
+> Copyright (c) 2016 Invoice-X  
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, [...] provided that the above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+J’ai intégré `invoice2data` comme dépendance pour extraire les données initiales des factures PDF, avant de les enrichir avec une intelligence artificielle (Claude d’Anthropic) pour une structuration adaptée aux besoins des restaurateurs. Un grand merci à l’équipe d’Invoice-X pour leur travail formidable !
