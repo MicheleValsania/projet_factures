@@ -1,0 +1,41 @@
+# Environnements Python
+venv/
+env/
+.env
+.venv
+ENV/
+
+# Fichiers Python compilés
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Fichiers de configuration locaux qui pourraient contenir des secrets
+config.local.py
+secrets.py
+.env
+
+# Dossiers de données
+data/
+output/
+factures_extraites.csv
+articles_factures.csv
+
+# Fichiers PDF (si vous ne voulez pas inclure les factures de test)
+*.pdf
+
+# Logs et fichiers temporaires
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
