@@ -39,3 +39,10 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+factures_analyzer/FACTURE_CENTENT.PDF
+factures_analyzer/reponse_directe.txt
+factures_analyzer/template_huguenin.yml
+factures_analyzer/templates/FACTURE_CENTENT.yml
+factures_analyzer/templates/Invoice_FCL2024127111.yml
+*.pdf
+*.odt
