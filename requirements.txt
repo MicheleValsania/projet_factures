@@ -2,3 +2,4 @@ invoice2data==0.4.5
 pdfplumber==0.11.4
 anthropic==0.34.1
 python-dotenv==1.0.1 
+python-dotenv
