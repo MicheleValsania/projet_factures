@@ -17,14 +17,17 @@ import sys  # Ajout de l'importation manquante
 import json
 import csv
 import re
+from dotenv import load_dotenv
 from datetime import datetime
 from invoice2data import extract_data
 from invoice2data.extract.loader import read_templates
 from anthropic import Anthropic
-
+load_dotenv()
 # Configuration de l'API Claude
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+
+
 
 # Chemins des fichiers CSV de sortie
 OUTPUT_CSV = "factures_extraites.csv"
