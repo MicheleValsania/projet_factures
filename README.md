@@ -18,7 +18,7 @@ Aider les restaurateurs français à mieux gérer leurs coûts en transformant l
 1. Clonez ce dépôt :
    ```bash
    git clone https://github.com/[votre-username]/analyseur-factures.git
-   cd analyseur-factures
+   cd factures_analyzer
 ## Crédits et Remerciements
 Ce projet utilise [invoice2data](https://github.com/invoice-x/invoice2data), une bibliothèque open-source sous licence MIT. Voici leur notice de copyright, conformément à leur licence :
 

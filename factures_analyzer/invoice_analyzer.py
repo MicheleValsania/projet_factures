@@ -13,7 +13,7 @@
 # Merci à Invoice-X pour leur outil d'extraction que j'ai étendu avec une IA !
 
 import os
-import sys
+import sys  # Ajout de l'importation manquante
 import json
 import csv
 import re
@@ -23,7 +23,7 @@ from invoice2data.extract.loader import read_templates
 from anthropic import Anthropic
 
 # Configuration de l'API Claude
-ANTHROPIC_API_KEY = "votre clé API"  # Remplacez par votre clé API
+ANTHROPIC_API_KEY = " Remplacez par votre clé API "
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # Chemins des fichiers CSV de sortie
@@ -31,9 +31,22 @@ OUTPUT_CSV = "factures_extraites.csv"
 ARTICLES_CSV = "articles_factures.csv"
 
 def traiter_facture_avec_invoice2data(chemin_pdf):
-    """Extrait les données de la facture avec invoice2data"""
+    """Extrait les données de la facture avec invoice2data."""
+    # Charge les templates par défaut
     templates = read_templates()
+    
+    # Charge les templates personnalisés depuis le dossier templates
+    templates_dir = "templates"
+    print(f"Chargement des templates depuis le dossier : {templates_dir}")
+    if os.path.exists(templates_dir):
+        for template_file in os.listdir(templates_dir):
+            if template_file.endswith(".yml"):
+                template_path = os.path.join(templates_dir, template_file)
+                print(f"Chargement du template : {template_path}")
+                templates.extend(read_templates(template_path))
+    
     try:
+        print(f"Tentative d'extraction avec invoice2data pour {chemin_pdf}...")
         result = extract_data(chemin_pdf, templates=templates)
         return result
     except Exception as e:
@@ -41,7 +54,7 @@ def traiter_facture_avec_invoice2data(chemin_pdf):
         return {}
 
 def extraire_texte_du_pdf(chemin_pdf):
-    """Extrait le texte du PDF pour l'envoyer à Claude"""
+    """Extrait le texte du PDF pour l'envoyer à Claude."""
     try:
         import pdfplumber
         with pdfplumber.open(chemin_pdf) as pdf:
@@ -56,48 +69,144 @@ def extraire_texte_du_pdf(chemin_pdf):
         print(f"Erreur lors de l'extraction du texte du PDF {chemin_pdf} : {e}")
         return ""
 
-def ameliorer_avec_claude(donnees_facture, texte_pdf):
-    """Améliore l'extraction des données en utilisant Claude"""
+def generer_template_avec_claude(texte_pdf, nom_fichier):
+    """Demande à Claude de générer un template YAML pour invoice2data."""
     prompt = f"""
-    Voici les données extraites d'une facture : {donnees_facture}
-    
-    Et voici le texte brut de la facture :
-    {texte_pdf[:4000]}  # Limité pour ne pas dépasser les limites de l'API
-    
-    Extrais les informations suivantes et corrige-les si nécessaire :
+    Voici le texte brut d'une facture :
+{texte_pdf[:4000]} # Limité pour ne pas dépasser les limites de l'API
+    Génère un template YAML pour invoice2data qui peut extraire les informations suivantes :
     - Numéro de facture
     - Date
     - Montant total
-    - TVA (indique les différents taux de TVA si plusieurs sont présents)
-    - Fournisseur
-    - Articles/services avec leur quantité, prix unitaire, montant et taux de TVA
-    
-    Réponds au format JSON strictement structuré comme ceci :
-    {{
-      "numero_facture": "XXX",
-      "date": "JJ/MM/AAAA",
-      "montant_total": "XXX,XX",
-      "tva": {{ "taux1": "montant1", "taux2": "montant2", ... }},
-      "fournisseur": "Nom du fournisseur",
-      "articles": [
-        {{
-          "description": "Description de l'article",
-          "quantite": "X",
-          "prix_unitaire": "XX,XX",
-          "montant": "XX,XX",
-          "taux_tva": "X%"
-        }},
-        ...
-      ]
-    }}
-    
-    N'inclus pas de symbole de devise (€, $, etc.) dans les valeurs numériques.
+    - Lignes d'articles (description, quantité, unité, prix unitaire, montant)
+    Le template doit être au format YAML strictement structuré comme ceci :
+    ```yaml
+    issuer: Nom du fournisseur
+    keywords:
+    - Mot clé 1
+    - Mot clé 2
+    fields:
+      date: REGEX_POUR_DATE
+      invoice_number: REGEX_POUR_NUMERO
+      amount: REGEX_POUR_MONTANT
+    lines:
+      start: REGEX_POUR_DEBUT_LIGNES
+      end: REGEX_POUR_FIN_LIGNES
+      line: (?P<desc>.+)\\s+(?P<qty>\\d+)\\s+(?P<unit>\\S+)\\s+(?P<price>\\d+\\.\\d+)\\s+(?P<total>\\d+\\.\\d+)
+    options:
+      currency: EUR
+      decimal_separator: "."
+    ```
+    Règles importantes :
+    Utilise le point (.) comme séparateur décimal dans les regex.
+    Assure-toi que les regex correspondent au format exact du texte (ex. "TOTAL 123.45", "FACTURE FCL2024127111").
+    Inclue des mots clés uniques pour identifier cette facture.
+    Le template doit être complet et prêt à être utilisé par invoice2data.
     """
-    
     try:
         message = anthropic_client.messages.create(
             model="claude-3-7-sonnet-20250219",
             max_tokens=1000,
+            system="Tu es un assistant spécialisé dans la création de templates pour invoice2data. Ta tâche est de générer un template YAML fonctionnel basé sur le texte d'une facture.",
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        return message.content
+    except Exception as e:
+        print(f"Erreur lors de la génération du template avec Claude : {e}")
+        return None
+
+def extraire_yaml_de_reponse_claude(reponse):
+    """Extrait le YAML de la réponse de Claude."""
+    try:
+        if isinstance(reponse, list):
+            texte_reponse = ""
+            for block in reponse:
+                if hasattr(block, 'text'):
+                    texte_reponse += block.text
+            reponse = texte_reponse
+        
+        if "```yaml" in reponse:
+            texte_yaml = reponse.split("```yaml")[1].split("```")[0].strip()
+        elif "```" in reponse:
+            texte_yaml = reponse.split("```")[1].strip()
+        else:
+            texte_yaml = reponse.strip()
+        
+        return texte_yaml
+    except Exception as e:
+        print(f"Erreur lors de l'extraction du YAML de la réponse de Claude : {e}")
+        return None
+
+def sauvegarder_template(nom_fichier, template_yaml):
+    """Sauvegarde le template YAML dans le dossier templates."""
+    templates_dir = "templates"
+    if not os.path.exists(templates_dir):
+        print(f"Création du dossier {templates_dir}...")
+        os.makedirs(templates_dir)
+    
+    # Utilise le nom du fichier (sans extension) pour le template
+    nom_template = os.path.splitext(os.path.basename(nom_fichier))[0] + ".yml"
+    chemin_template = os.path.join(templates_dir, nom_template)
+    
+    try:
+        with open(chemin_template, 'w', encoding='utf-8') as f:
+            f.write(template_yaml)
+        print(f"Template sauvegardé avec succès : {chemin_template}")
+        print(f"Contenu du template généré :\n{template_yaml}\n")
+        return chemin_template
+    except Exception as e:
+        print(f"Erreur lors de la sauvegarde du template : {e}")
+        return None
+
+def ameliorer_avec_claude(donnees_facture, texte_pdf):
+    """Améliore l'extraction des données en utilisant Claude."""
+    prompt = f"""
+Voici les données extraites d'une facture : {donnees_facture}
+
+Et voici le texte brut de la facture :
+{texte_pdf[:4000]}  # Limité pour ne pas dépasser les limites de l'API
+
+Extrais les informations suivantes et corrige-les si nécessaire :
+- Numéro de facture
+- Date
+- Montant total
+- TVA (indique les différents taux de TVA si plusieurs sont présents)
+- Fournisseur
+- Articles/services avec leur quantité, prix unitaire, montant et taux de TVA
+
+Réponds au format JSON strictement structuré comme ceci :
+{{
+  "numero_facture": "XXX",
+  "date": "JJ/MM/AAAA",
+  "montant_total": "XXX.XX",
+  "tva": {{ "taux1": "montant1", "taux2": "montant2", ... }},
+  "fournisseur": "Nom du fournisseur",
+  "articles": [
+    {{
+      "description": "Description de l'article",
+      "quantite": "X",
+      "prix_unitaire": "XX.XX",
+      "montant": "XX.XX",
+      "taux_tva": "X%"
+    }},
+    ...
+  ]
+}}
+
+Règles importantes :
+- Utilise le point (.) comme séparateur décimal, et non la virgule (ex. "123.45", et non "123,45").
+- Pour les taux de TVA dans l'objet "tva", utilise uniquement le nombre comme clé, sans le symbole % (ex. "5.5" au lieu de "5.5%").
+- N'inclus pas de symbole de devise (€, $, etc.) dans les valeurs numériques.
+- Assure-toi que le JSON soit complet et bien formaté.
+- Si la facture a plusieurs pages, extrais uniquement les données de la page fournie.
+"""
+    
+    try:
+        message = anthropic_client.messages.create(
+            model="claude-3-7-sonnet-20250219",
+            max_tokens=2000,
             system="Tu es un assistant spécialisé dans l'extraction de données des factures. Ta tâche est d'extraire les informations structurées d'une facture et de les renvoyer dans un format JSON clair et cohérent.",
             messages=[
                 {"role": "user", "content": prompt}
@@ -109,7 +218,7 @@ def ameliorer_avec_claude(donnees_facture, texte_pdf):
         return "Erreur lors de l'appel API"
 
 def extraire_json_de_reponse_claude(reponse):
-    """Extrait le JSON de la réponse de Claude"""
+    """Extrait le JSON de la réponse de Claude."""
     try:
         # Vérifie si la réponse est une liste de TextBlock
         if isinstance(reponse, list):
@@ -127,39 +236,20 @@ def extraire_json_de_reponse_claude(reponse):
         else:
             texte_json = reponse.strip()
         
+        # Remplace les virgules par des points dans les taux de TVA
+        texte_json = re.sub(r'"(\d+),(\d+)"', r'"\1.\2"', texte_json)
+        
         # Charge le JSON
         donnees_extraites = json.loads(texte_json)
         print(f"JSON extrait avec succès : {texte_json[:100]}...")
         return donnees_extraites
     except Exception as e:
         print(f"Erreur lors de l'extraction du JSON de la réponse de Claude : {e}")
-        print(f"Type de réponse : {type(reponse)}")
-        
-        # Pour le débogage
-        if isinstance(reponse, str):
-            print(f"Début de la réponse : {reponse[:200]}...")
-        elif isinstance(reponse, list) and len(reponse) > 0:
-            if hasattr(reponse[0], 'text'):
-                print(f"Début du TextBlock : {reponse[0].text[:200]}...")
-        
-        # Dernier recours : essayer d'extraire manuellement
-        try:
-            if isinstance(reponse, list) and len(reponse) > 0:
-                block = reponse[0]
-                if hasattr(block, 'text'):
-                    texte = block.text
-                    if "```json" in texte:
-                        texte_json = texte.split("```json")[1].split("```")[0].strip()
-                        json_data = json.loads(texte_json)
-                        print("Extraction manuelle réussie!")
-                        return json_data
-        except Exception as nested_e:
-            print(f"Échec de l'extraction manuelle : {nested_e}")
-        
+        print(f"Risposta complète : {reponse}")
         return {}
 
 def nettoyer_valeur_monetaire(valeur):
-    """Nettoie une valeur monétaire en enlevant les symboles de devise et en normalisant la notation décimale"""
+    """Nettoie une valeur monétaire en enlevant les symboles de devise et en normalisant la notation décimale."""
     if not valeur:
         return ""
     # Convertit en chaîne si ce n'est pas déjà le cas
@@ -171,7 +261,7 @@ def nettoyer_valeur_monetaire(valeur):
     return valeur_propre
 
 def sauvegarder_factures_en_csv(liste_donnees):
-    """Sauvegarde les données des factures dans un fichier CSV"""
+    """Sauvegarde les données des factures dans un fichier CSV."""
     if not liste_donnees:
         print("Aucune donnée de facture à sauvegarder.")
         return False
@@ -198,7 +288,7 @@ def sauvegarder_factures_en_csv(liste_donnees):
         return False
 
 def sauvegarder_articles_en_csv(liste_articles):
-    """Sauvegarde les données des articles dans un fichier CSV"""
+    """Sauvegarde les données des articles dans un fichier CSV."""
     if not liste_articles:
         print("Aucun article à sauvegarder.")
         return False
@@ -225,7 +315,7 @@ def sauvegarder_articles_en_csv(liste_articles):
         return False
 
 def aplatir_donnees_facture(donnees_facture, nom_fichier):
-    """Aplatit les données de la facture pour le CSV principal"""
+    """Aplatit les données de la facture pour le CSV principal."""
     donnees_plates = {
         "nom_fichier": os.path.basename(nom_fichier),
         "date_extraction": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -276,7 +366,7 @@ def aplatir_donnees_facture(donnees_facture, nom_fichier):
     return donnees_plates
 
 def extraire_articles(donnees_facture, nom_fichier, numero_facture):
-    """Extrait les articles de la facture pour le CSV des articles"""
+    """Extrait les articles de la facture pour le CSV des articles."""
     articles = []
     
     # Clés possibles pour les articles
@@ -328,13 +418,32 @@ def extraire_articles(donnees_facture, nom_fichier, numero_facture):
     return articles
 
 def traiter_fichier_unique(chemin_pdf, toutes_donnees, tous_articles):
-    """Traite un seul fichier PDF et ajoute les données aux listes"""
+    """Traite un seul fichier PDF et ajoute les données aux listes."""
     print(f"\nTraitement de la facture : {chemin_pdf}")
     
     # Extraction initiale avec invoice2data
     donnees_facture = traiter_facture_avec_invoice2data(chemin_pdf)
     print("\nDonnées extraites avec invoice2data :")
     print(donnees_facture)
+    
+    # Si invoice2data échoue, génère un template avec Claude
+    if not donnees_facture:
+        print("invoice2data n'a pas trouvé de template. Génération d'un template avec Claude...")
+        texte_pdf = extraire_texte_du_pdf(chemin_pdf)
+        if not texte_pdf:
+            print("Impossible d'extraire le texte du PDF.")
+            return
+        
+        reponse_template = generer_template_avec_claude(texte_pdf, chemin_pdf)
+        if reponse_template:
+            template_yaml = extraire_yaml_de_reponse_claude(reponse_template)
+            if template_yaml:
+                chemin_template = sauvegarder_template(chemin_pdf, template_yaml)
+                if chemin_template:
+                    # Réessaie l'extraction avec le nouveau template
+                    donnees_facture = traiter_facture_avec_invoice2data(chemin_pdf)
+                    print("\nDonnées extraites avec invoice2data après ajout du template :")
+                    print(donnees_facture)
     
     # Extraction du texte pour Claude
     texte_pdf = extraire_texte_du_pdf(chemin_pdf)
@@ -347,7 +456,6 @@ def traiter_fichier_unique(chemin_pdf, toutes_donnees, tous_articles):
     reponse_claude = ameliorer_avec_claude(donnees_facture, texte_pdf)
     
     print("\nDonnées améliorées par Claude :")
-    # Correction de l'affichage pour gérer à la fois les chaînes et les listes
     if isinstance(reponse_claude, list):
         print("[Liste d'objets TextBlock]")
     else:
@@ -385,7 +493,7 @@ def traiter_fichier_unique(chemin_pdf, toutes_donnees, tous_articles):
         print("Échec de l'extraction des données JSON. Aucune donnée à ajouter.")
 
 def main():
-    """Fonction principale qui démarre le processus"""
+    """Fonction principale qui démarre le processus."""
     if len(sys.argv) < 2:
         print("Usage : python analyseur_factures.py chemin_vers_fichier.pdf OU chemin_vers_repertoire")
         return
