@@ -23,11 +23,7 @@ from invoice2data.extract.loader import read_templates
 from anthropic import Anthropic
 
 # Configuration de l'API Claude
-<<<<<<< HEAD
-ANTHROPIC_API_KEY = " Remplacez par votre clé API "
-=======
-ANTHROPIC_API_KEY = ""  # Remplacez par votre clé API
->>>>>>> 184601b (remove secret)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # Chemins des fichiers CSV de sortie
