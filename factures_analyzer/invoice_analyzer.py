@@ -13,32 +13,36 @@
 # Merci à Invoice-X pour leur outil d'extraction que j'ai étendu avec une IA !
 
 import os
-import sys  # Ajout de l'importation manquante
+import sys  
 import json
 import csv
 import re
+import pytesseract
+from pdf2image import convert_from_path
 from dotenv import load_dotenv
 from datetime import datetime
-from invoice2data import extract_data
 from invoice2data.extract.loader import read_templates
+from invoice2data.extract.invoice_template import InvoiceTemplate 
 from anthropic import Anthropic
+
 load_dotenv()
+
 # Configuration de l'API Claude
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
-
-
 
 # Chemins des fichiers CSV de sortie
 OUTPUT_CSV = "factures_extraites.csv"
 ARTICLES_CSV = "articles_factures.csv"
 
+
+
+
+
 def traiter_facture_avec_invoice2data(chemin_pdf):
-    """Extrait les données de la facture avec invoice2data."""
-    # Charge les templates par défaut
+    """Extrait les données de la facture avec invoice2data en utilisant Tesseract."""
     templates = read_templates()
     
-    # Charge les templates personnalisés depuis le dossier templates
     templates_dir = "templates"
     print(f"Chargement des templates depuis le dossier : {templates_dir}")
     if os.path.exists(templates_dir):
@@ -49,28 +53,30 @@ def traiter_facture_avec_invoice2data(chemin_pdf):
                 templates.extend(read_templates(template_path))
     
     try:
+        print(f"Extraction du texte avec Tesseract pour {chemin_pdf}...")
+        pages = convert_from_path(chemin_pdf)
+        texte_brut = ""
+        for page in pages:
+            texte_brut += pytesseract.image_to_string(page, lang="fra")
+        if not texte_brut:
+            print("Aucun texte extrait par Tesseract.")
+            return {}
+        print(f"Testo grezzo estratto con Tesseract (prime 1000 chars):\n{texte_brut[:1000]}")
+        
         print(f"Tentative d'extraction avec invoice2data pour {chemin_pdf}...")
-        result = extract_data(chemin_pdf, templates=templates)
-        return result
+        for template in templates:
+            invoice_template = InvoiceTemplate(template)
+            if invoice_template.matches_input(texte_brut):
+                result = invoice_template.extract(texte_brut, chemin_pdf, None)
+                print(f"Risultato di invoice2data: {result}")
+                return result
+            else:
+                print(f"Template {template.get('template_name', 'senza nome')} non corrisponde.")
+        print("Nessun template corrisponde al testo estratto.")
+        return {}
     except Exception as e:
         print(f"Erreur lors de l'extraction avec invoice2data : {e}")
         return {}
-
-def extraire_texte_du_pdf(chemin_pdf):
-    """Extrait le texte du PDF pour l'envoyer à Claude."""
-    try:
-        import pdfplumber
-        with pdfplumber.open(chemin_pdf) as pdf:
-            texte = ""
-            for page in pdf.pages:
-                texte += page.extract_text() or ""
-        return texte
-    except ImportError:
-        print("Installez pdfplumber avec : pip install pdfplumber")
-        return ""
-    except Exception as e:
-        print(f"Erreur lors de l'extraction du texte du PDF {chemin_pdf} : {e}")
-        return ""
 
 def generer_template_avec_claude(texte_pdf, nom_fichier):
     """Demande à Claude de générer un template YAML pour invoice2data."""
@@ -421,18 +427,19 @@ def extraire_articles(donnees_facture, nom_fichier, numero_facture):
     return articles
 
 def traiter_fichier_unique(chemin_pdf, toutes_donnees, tous_articles):
-    """Traite un seul fichier PDF et ajoute les données aux listes."""
     print(f"\nTraitement de la facture : {chemin_pdf}")
     
-    # Extraction initiale avec invoice2data
     donnees_facture = traiter_facture_avec_invoice2data(chemin_pdf)
     print("\nDonnées extraites avec invoice2data :")
     print(donnees_facture)
     
-    # Si invoice2data échoue, génère un template avec Claude
     if not donnees_facture:
         print("invoice2data n'a pas trouvé de template. Génération d'un template avec Claude...")
-        texte_pdf = extraire_texte_du_pdf(chemin_pdf)
+        # Usa il testo già estratto da Tesseract
+        pages = convert_from_path(chemin_pdf)
+        texte_pdf = ""
+        for page in pages:
+            texte_pdf += pytesseract.image_to_string(page, lang="fra")
         if not texte_pdf:
             print("Impossible d'extraire le texte du PDF.")
             return
@@ -448,8 +455,12 @@ def traiter_fichier_unique(chemin_pdf, toutes_donnees, tous_articles):
                     print("\nDonnées extraites avec invoice2data après ajout du template :")
                     print(donnees_facture)
     
-    # Extraction du texte pour Claude
-    texte_pdf = extraire_texte_du_pdf(chemin_pdf)
+       # Extraction du texte avec Tesseract pour Claude
+    print(f"Extraction du texte avec Tesseract pour Claude...")
+    pages = convert_from_path(chemin_pdf)
+    texte_pdf = ""
+    for page in pages:
+        texte_pdf += pytesseract.image_to_string(page, lang="fra")
     if not texte_pdf:
         print("Impossible d'extraire le texte du PDF.")
         return
